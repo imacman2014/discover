@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discover Load Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { margin: 0; padding: 0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+    
+    const INITIAL_HISTORY = [
+      ["2025-11-30 14:15", 500], ["2025-11-30 14:27", 500], ["2025-12-06 08:16", 500], 
+      ["2025-12-06 08:18", 500], ["2025-12-09 18:15", 500], ["2025-12-09 18:17", 500], 
+      ["2025-12-13 08:30", 500], ["2025-12-13 08:31", 500], ["2025-12-14 11:08", 500], 
+      ["2025-12-15 17:30", 500], ["2025-12-15 17:33", 500], ["2025-12-19 18:18", 500], 
+      ["2025-12-19 18:20", 500], ["2025-12-26 10:33", 500], ["2025-12-28 14:25", 500], 
+      ["2025-12-28 14:26", 500], ["2025-12-30 14:35", 500], ["2025-12-30 14:36", 500], 
+      ["2026-01-01 14:35", 500], ["2026-01-01 14:37", 500]
+    ];
+
+    // Enhanced localStorage with better persistence
+    const storage = {
+      get: (key) => {
+        try {
+          const item = localStorage.getItem(key);
+          if (!item) return null;
+          return JSON.parse(item);
+        } catch (e) {
+          console.error('Storage get error:', e);
+          return null;
+        }
+      },
+      set: (key, value) => {
+        try {
+          localStorage.setItem(key, JSON.stringify(value));
+          // Also save to sessionStorage as backup
+          sessionStorage.setItem(key, JSON.stringify(value));
+          return true;
+        } catch (e) {
+          console.error('Storage set error:', e);
+          alert('Warning: Data might not be saved. Check Safari settings.');
+          return false;
+        }
+      },
+      remove: (key) => {
+        try {
+          localStorage.removeItem(key);
+          sessionStorage.removeItem(key);
+        } catch (e) {
+          console.error('Storage remove error:', e);
+        }
+      }
+    };
+
+    // Icons
+    const PlusIcon = () => (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+    );
+    
+    const TrashIcon = () => (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+      </svg>
+    );
+    
+    const DollarIcon = () => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <line x1="12" y1="1" x2="12" y2="23"></line>
+        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+      </svg>
+    );
+    
+    const CalendarIcon = () => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+        <line x1="16" y1="2" x2="16" y2="6"></line>
+        <line x1="8" y1="2" x2="8" y2="6"></line>
+        <line x1="3" y1="10" x2="21" y2="10"></line>
+      </svg>
+    );
+    
+    const RefreshIcon = () => (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <polyline points="1 20 1 14 7 14"></polyline>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+      </svg>
+    );
+    
+    const DownloadIcon = () => (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+    );
+    
+    const UploadIcon = () => (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="17 8 12 3 7 8"></polyline>
+        <line x1="12" y1="3" x2="12" y2="15"></line>
+      </svg>
+    );
+
+    function DiscoverLoadTracker() {
+      const [loads, setLoads] = useState([]);
+      const [amount, setAmount] = useState('');
+      const [datetime, setDatetime] = useState('');
+      const [forecast, setForecast] = useState([]);
+      const [successMessage, setSuccessMessage] = useState('');
+      const [storageWarning, setStorageWarning] = useState(false);
+
+      useEffect(() => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hour = String(now.getHours()).padStart(2, '0');
+        const minute = String(now.getMinutes()).padStart(2, '0');
+        setDatetime(`${year}-${month}-${day}T${hour}:${minute}`);
+      }, []);
+
+      useEffect(() => {
+        // Try localStorage first, then sessionStorage as backup
+        let saved = storage.get('discover-loads');
+        if (!saved) {
+          saved = storage.get('discover-loads-backup');
+        }
+        
+        if (saved && Array.isArray(saved) && saved.length > 0) {
+          setLoads(saved);
+          console.log('Loaded', saved.length, 'transactions from storage');
+        } else {
+          const initialLoads = INITIAL_HISTORY.map(([dt, amt]) => ({
+            id: `init-${dt}`,
+            datetime: dt,
+            amount: amt,
+            timestamp: new Date(dt).getTime()
+          }));
+          setLoads(initialLoads);
+          console.log('Initialized with', initialLoads.length, 'historical transactions');
+        }
+        
+        // Check if storage is working
+        try {
+          localStorage.setItem('test', 'test');
+          localStorage.removeItem('test');
+        } catch (e) {
+          setStorageWarning(true);
+        }
+      }, []);
+
+      useEffect(() => {
+        if (loads.length > 0) {
+          const success = storage.set('discover-loads', loads);
+          // Also save a backup copy
+          storage.set('discover-loads-backup', loads);
+          console.log('Saved', loads.length, 'transactions to storage');
+        }
+      }, [loads]);
+
+      useEffect(() => {
+        if (loads.length > 0) {
+          calculateForecast();
+        }
+      }, [loads]);
+
+      const addLoad = () => {
+        if (!amount || !datetime) {
+          alert('Please enter both amount and date/time');
+          return;
+        }
+
+        const amt = parseFloat(amount);
+        if (amt < 20) {
+          alert('Minimum load is $20');
+          return;
+        }
+
+        const newLoad = {
+          id: Date.now().toString(),
+          datetime: datetime.replace('T', ' '),
+          amount: amt,
+          timestamp: new Date(datetime).getTime()
+        };
+
+        const updatedLoads = [...loads, newLoad].sort((a, b) => a.timestamp - b.timestamp);
+        setLoads(updatedLoads);
+        
+        setSuccessMessage(`$${amt.toFixed(2)} load successfully`);
+        setTimeout(() => setSuccessMessage(''), 3000);
+        
+        setAmount('');
+        
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hour = String(now.getHours()).padStart(2, '0');
+        const minute = String(now.getMinutes()).padStart(2, '0');
+        setDatetime(`${year}-${month}-${day}T${hour}:${minute}`);
+      };
+
+      const deleteLoad = (id) => {
+        const updated = loads.filter(l => l.id !== id);
+        setLoads(updated);
+        if (updated.length === 0) {
+          storage.remove('discover-loads');
+          storage.remove('discover-loads-backup');
+        }
+      };
+
+      const exportData = () => {
+        const dataStr = JSON.stringify(loads, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `discover-loads-backup-${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const importData = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const imported = JSON.parse(e.target.result);
+            if (Array.isArray(imported)) {
+              setLoads(imported);
+              alert(`Successfully imported ${imported.length} loads!`);
+            } else {
+              alert('Invalid backup file format');
+            }
+          } catch (error) {
+            alert('Error reading backup file');
+          }
+        };
+        reader.readAsText(file);
+      };
+
+      const calculateForecast = () => {
+        const now = new Date();
+        const nowTimestamp = now.getTime();
+        const results = [];
+        const LOAD_AMOUNT = 490; // Default load amount
+
+        const historicalLoads = loads.filter(l => l.timestamp <= nowTimestamp);
+        const projectedLoads = [...historicalLoads];
+
+        for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+          const targetDate = new Date(now);
+          targetDate.setDate(targetDate.getDate() + dayOffset);
+          targetDate.setHours(0, 0, 0, 0);
+
+          let maxLoadCount = 0;
+          let bestTime = null;
+
+          // Check each minute of the day
+          for (let hour = 0; hour < 24; hour++) {
+            for (let minute = 0; minute < 60; minute += 1) {
+              const checkTime = new Date(targetDate);
+              checkTime.setHours(hour, minute, 0, 0);
+              const checkTimestamp = checkTime.getTime();
+
+              if (checkTimestamp < nowTimestamp) continue;
+
+              // Calculate limits at this specific time
+              const last24h = checkTimestamp - 24 * 60 * 60 * 1000;
+              const last7d = checkTimestamp - 7 * 24 * 60 * 60 * 1000;
+              const last30d = checkTimestamp - 30 * 24 * 60 * 60 * 1000;
+
+              // Amount sums
+              const sum24h = projectedLoads
+                .filter(l => l.timestamp > last24h && l.timestamp < checkTimestamp)
+                .reduce((sum, l) => sum + l.amount, 0);
+
+              const sum7d = projectedLoads
+                .filter(l => l.timestamp > last7d && l.timestamp < checkTimestamp)
+                .reduce((sum, l) => sum + l.amount, 0);
+
+              const sum30d = projectedLoads
+                .filter(l => l.timestamp > last30d && l.timestamp < checkTimestamp)
+                .reduce((sum, l) => sum + l.amount, 0);
+
+              // Count limits
+              const count24h = projectedLoads
+                .filter(l => l.timestamp > last24h && l.timestamp < checkTimestamp)
+                .length;
+
+              const count7d = projectedLoads
+                .filter(l => l.timestamp > last7d && l.timestamp < checkTimestamp)
+                .length;
+
+              const count30d = projectedLoads
+                .filter(l => l.timestamp > last30d && l.timestamp < checkTimestamp)
+                .length;
+
+              // Available amounts
+              const available24h = 1000 - sum24h;
+              const available7d = 7000 - sum7d;
+              const available30d = 10000 - sum30d;
+
+              // Available counts
+              const availableCount24h = 4 - count24h;
+              const availableCount7d = 7 - count7d;
+              const availableCount30d = 20 - count30d;
+
+              // Calculate max loads based on amount limits
+              const maxByAmount = Math.floor(Math.min(available24h, available7d, available30d) / LOAD_AMOUNT);
+              
+              // Calculate max loads based on count limits
+              const maxByCount = Math.min(availableCount24h, availableCount7d, availableCount30d);
+              
+              // Actual max loads is the minimum of both constraints
+              const canLoadCount = Math.max(0, Math.min(maxByAmount, maxByCount));
+
+              if (canLoadCount > 0 && canLoadCount > maxLoadCount) {
+                maxLoadCount = canLoadCount;
+                bestTime = checkTime;
+              }
+            }
+          }
+
+          const dateStr = targetDate.toISOString().split('T')[0];
+          results.push({
+            date: dateStr,
+            loadCount: maxLoadCount,
+            amount: maxLoadCount * LOAD_AMOUNT,
+            time: bestTime
+          });
+
+          // Add projected loads for this day
+          if (maxLoadCount > 0 && bestTime) {
+            for (let i = 0; i < maxLoadCount; i++) {
+              projectedLoads.push({
+                id: `projected-${dayOffset}-${i}`,
+                datetime: bestTime.toISOString().replace('T', ' ').slice(0, 16),
+                amount: LOAD_AMOUNT,
+                timestamp: bestTime.getTime() + (i * 60000) // 1 minute apart
+              });
+            }
+          }
+        }
+
+        setForecast(results);
+      };
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-orange-50 to-purple-100 p-4">
+          <div className="max-w-2xl mx-auto">
+            {storageWarning && (
+              <div className="bg-yellow-100 border-2 border-yellow-500 text-yellow-800 px-4 py-3 rounded-lg mb-4">
+                ⚠️ Storage may not work properly. Check Safari settings: Settings → Safari → Disable "Block All Cookies"
+              </div>
+            )}
+            
+            <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+              <div className="flex items-center justify-between mb-6">
+                <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                  <DollarIcon />
+                  Discover Load Tracker
+                </h1>
+              </div>
+              
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 mb-4 text-sm">
+                <div className="font-semibold text-blue-900 mb-1">💾 Data Backup</div>
+                <div className="text-blue-800 mb-2">Your data saves automatically, but you can backup/restore:</div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={exportData}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                  >
+                    <DownloadIcon />
+                    Export
+                  </button>
+                  <label className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 text-sm cursor-pointer">
+                    <UploadIcon />
+                    Import
+                    <input type="file" accept=".json" onChange={importData} className="hidden" />
+                  </label>
+                </div>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Amount ($) - Min $20
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="20.00"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date & Time
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={datetime}
+                    onChange={(e) => setDatetime(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  />
+                </div>
+
+                <button
+                  onClick={addLoad}
+                  className="w-full bg-orange-600 text-white py-3 rounded-lg font-semibold hover:bg-orange-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <PlusIcon />
+                  Add Load
+                </button>
+                
+                {successMessage && (
+                  <div className="bg-green-100 border-2 border-green-500 text-green-700 px-4 py-3 rounded-lg text-center font-semibold">
+                    {successMessage}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-purple-50 rounded-lg p-4 text-sm space-y-1">
+                <div className="font-bold text-purple-900 mb-2">Loading Limits:</div>
+                <div className="text-purple-800">• $20 minimum per transaction</div>
+                <div className="text-purple-800">• $1,000 max per 24 hours</div>
+                <div className="text-purple-800">• $7,000 max per 7 days</div>
+                <div className="text-purple-800">• $10,000 max per 30 days</div>
+                <div className="text-purple-800 font-semibold mt-2">Count Limits:</div>
+                <div className="text-purple-800">• Max 4 loads per 24 hours</div>
+                <div className="text-purple-800">• Max 7 loads per 7 days</div>
+                <div className="text-purple-800">• Max 20 loads per 30 days</div>
+                <div className="text-purple-800 mt-2 italic">💡 Using $490 per load for forecast</div>
+              </div>
+            </div>
+
+            {forecast.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <CalendarIcon />
+                    7-Day Load Forecast
+                  </h2>
+                  <button
+                    onClick={calculateForecast}
+                    className="flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors"
+                  >
+                    <RefreshIcon />
+                    Refresh
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {forecast.map((day, idx) => (
+                    <div
+                      key={idx}
+                      className={`p-4 rounded-lg ${
+                        day.loadCount === 0 
+                          ? 'bg-red-50 border-2 border-red-200' 
+                          : 'bg-green-50 border-2 border-green-200'
+                      }`}
+                    >
+                      {day.loadCount === 0 ? (
+                        <div>
+                          <div className="font-bold text-red-700 text-lg">{day.date}</div>
+                          <div className="text-red-600 font-semibold">Sorry, Can't Load Today!</div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="font-bold text-green-700 text-lg">
+                            {day.date} {day.time ? `${String(day.time.getHours()).padStart(2, '0')}:${String(day.time.getMinutes()).padStart(2, '0')}` : ''}
+                          </div>
+                          <div className="text-green-600 font-semibold">
+                            You can load {day.loadCount} time{day.loadCount > 1 ? 's' : ''} (${day.amount} total)!
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {loads.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-xl p-6">
+                <h2 className="text-xl font-bold text-gray-800 mb-4">
+                  Load History ({loads.length} loads)
+                </h2>
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {loads.slice().reverse().map((load) => (
+                    <div
+                      key={load.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <div>
+                        <div className="font-bold text-gray-800">
+                          ${load.amount.toFixed(2)}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {load.datetime.replace(/(\d{1,2}):(\d{2})(?::(\d{2}))?$/, (match, h, m) => {
+                            return `${String(h).padStart(2, '0')}:${m}`;
+                          })}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => deleteLoad(load.id)}
+                        className="text-red-500 hover:text-red-700 p-2"
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<DiscoverLoadTracker />, document.getElementById('root'));
+  </script>
+</body>
+</html>
